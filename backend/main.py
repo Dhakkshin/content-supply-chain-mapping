@@ -12,37 +12,35 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
 # --- Globals and Initialization ---
-# Initialize the Firestore client. This is done globally so that it can be
-# reused across function invocations, which is a performance best practice.
 db = firestore.Client()
 
 # --- Helper Functions for Analysis ---
 
 def get_dynamic_html_with_selenium(url):
     """
-    Uses a headless Chrome browser in the GCP environment to fully render a page.
-    This is the core of our dynamic analysis.
+    Uses a headless Chrome browser to render a page, now with a realistic User-Agent
+    to better simulate a real user and avoid basic bot detection.
     """
     print(f"Starting Selenium for URL: {url}")
     chrome_options = Options()
-    # These arguments are essential for running Chrome in a serverless environment.
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     
-    # In the GCP environment, we don't need webdriver-manager. The system knows
-    # where to find the pre-installed chromedriver. This is much simpler!
+    # UPGRADE: Adding a standard User-Agent string to appear more like a real browser.
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
+    chrome_options.add_argument(f'user-agent={user_agent}')
+    
     driver = webdriver.Chrome(options=chrome_options)
     
     html = ""
     try:
         driver.get(url)
-        # Wait a few seconds to allow JavaScript to load dynamic content.
-        time.sleep(5) 
+        # Increased sleep time to allow more complex, ad-heavy sites to load.
+        time.sleep(7) 
         html = driver.page_source
         print("Successfully captured dynamic HTML.")
     finally:
-        # It's crucial to always quit the driver to free up resources.
         driver.quit()
         
     return html
@@ -52,28 +50,25 @@ def get_unique_assets(base_url, soup):
     Parses the HTML soup to find all unique assets (images, scripts, etc.)
     and categorizes them, returning a list of asset dictionaries.
     """
-    assets = {} # Using a dictionary keyed by URL prevents duplicates.
+    assets = {}
     
-    # Process various tags to find asset URLs.
-    for tag in soup.find_all(['link', 'script', 'img', 'iframe']):
+    for tag in soup.find_all(['link', 'script', 'img', 'iframe', 'source']):
         url = tag.get('href') or tag.get('src')
-        if url:
-            # Determine asset type based on the tag or file extension.
+        if url and not url.startswith('data:'): # Ignore inline data URIs
             asset_type = 'Unknown'
             tag_name = tag.name
             if tag_name == 'link' and 'stylesheet' in tag.get('rel', []):
                 asset_type = 'Stylesheet'
             elif tag_name == 'script':
                 asset_type = 'Script'
-            elif tag_name == 'img':
-                asset_type = 'Image'
+            elif tag_name in ['img', 'source']:
+                asset_type = 'Image/Media'
             elif tag_name == 'iframe':
                 asset_type = 'iFrame'
             
             absolute_url = urljoin(base_url, url)
             assets[absolute_url] = {'type': asset_type}
 
-    # Add the base HTML document itself to our analysis.
     assets[base_url] = {'type': 'HTML Document'}
 
     asset_list = []
@@ -94,20 +89,16 @@ def get_ip_from_domain(domain):
 
 def get_geolocation(ip_address):
     """Uses a free GeoIP API to find the location of an IP address."""
-    if not ip_address:
-        return None
+    if not ip_address: return None
     try:
-        # This free API is great for testing. For a production app, you might use a paid service.
         response = requests.get(f'http://ip-api.com/json/{ip_address}?fields=status,lat,lon,city,country,org')
         response.raise_for_status()
         data = response.json()
         if data and data.get('status') == 'success':
             return {
-                "lat": data.get('lat'),
-                "lon": data.get('lon'),
-                "city": data.get('city', 'Unknown City'),
-                "country": data.get('country', 'Unknown Country'),
-                "isp": data.get('org', 'Unknown ISP')
+                "lat": data.get('lat'), "lon": data.get('lon'),
+                "city": data.get('city', 'Unknown'), "country": data.get('country', 'Unknown'),
+                "isp": data.get('org', 'Unknown')
             }
     except Exception as e:
         print(f"GeoIP lookup failed for {ip_address}: {e}")
@@ -118,68 +109,57 @@ def get_geolocation(ip_address):
 @functions_framework.http
 def analyze_supply_chain(request):
     """
-    An HTTP-triggered Cloud Function that analyzes the content supply chain of a given URL.
-    This is the main function that will be deployed.
+    The main HTTP-triggered function. This version has been significantly upgraded
+    to provide detailed, asset-level information.
     """
-    # Set CORS headers to allow requests from any origin. This is crucial for our
-    # frontend JavaScript to be able to call this function.
-    headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-    }
-    if request.method == 'OPTIONS':
-        return ('', 204, headers)
+    headers = {'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type'}
+    if request.method == 'OPTIONS': return ('', 204, headers)
 
-    # Get the URL from the POST request body.
     request_json = request.get_json(silent=True)
     if not request_json or 'url' not in request_json:
-        return (jsonify({"error": "Invalid request. 'url' parameter is required."}), 400, headers)
+        return (jsonify({"error": "Invalid request. 'url' is required."}), 400, headers)
     
     target_url = request_json['url']
-    
-    # Create a unique ID for this analysis to track it in Firestore.
     analysis_id = str(uuid.uuid4())
     doc_ref = db.collection('analyses').document(analysis_id)
-    doc_ref.set({"status": "starting", "target_url": target_url, "locations": []})
+    # NEW STRUCTURE: The document will now contain a list of 'assets'.
+    doc_ref.set({"status": "starting", "target_url": target_url, "assets": []})
 
     print(f"Starting analysis {analysis_id} for URL: {target_url}")
 
     try:
-        # --- The Core Analysis Pipeline ---
         final_html = get_dynamic_html_with_selenium(target_url)
         soup = BeautifulSoup(final_html, 'html.parser')
         unique_assets = get_unique_assets(target_url, soup)
-        
         doc_ref.update({"status": f"found_{len(unique_assets)}_assets"})
+        
+        # This cache is a performance optimization. As a CS student, you'll see
+        # it prevents us from repeatedly looking up the location for the same domain.
+        domain_location_cache = {}
 
-        domains_to_analyze = {asset['domain'] for asset in unique_assets}
-        unique_ips = set()
+        for asset in unique_assets:
+            domain = asset['domain']
+            location_data = None
 
-        for domain in domains_to_analyze:
-            ip = get_ip_from_domain(domain)
-            if ip and ip not in unique_ips:
-                unique_ips.add(ip)
-                location = get_geolocation(ip)
-                if location:
-                    # This is the key for real-time updates!
-                    # We add the new location to an array in the Firestore document.
-                    # Our frontend will be listening for changes to this array.
-                    location_data = {
-                        "domain": domain,
-                        "ip": ip,
-                        "city": location['city'],
-                        "country": location['country'],
-                        "lat": location['lat'],
-                        "lon": location['lon'],
-                        "isp": location['isp']
-                    }
-                    doc_ref.update({"locations": firestore.ArrayUnion([location_data])})
+            if domain in domain_location_cache:
+                location_data = domain_location_cache[domain]
+            else:
+                ip = get_ip_from_domain(domain)
+                if ip:
+                    location = get_geolocation(ip)
+                    if location:
+                        location_data = {"ip": ip, **location}
+                # Cache the result, even if it's a failure (None), to avoid retrying.
+                domain_location_cache[domain] = location_data
+            
+            if location_data:
+                # NEW STRUCTURE: We combine the asset info with its location info
+                # and save this rich object to the database.
+                asset_payload = {**asset, **location_data}
+                doc_ref.update({"assets": firestore.ArrayUnion([asset_payload])})
         
         doc_ref.update({"status": "completed"})
         print(f"Analysis {analysis_id} completed successfully.")
-        
-        # Return the analysis ID so the frontend knows which document to listen to.
         return (jsonify({"analysis_id": analysis_id}), 200, headers)
 
     except Exception as e:

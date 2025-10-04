@@ -1,0 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap');
+
+body {
+    font-family: 'Inter', sans-serif;
+}
+
+#map {
+    height: 500px;
+    background-color: #e2e8f0; /* A light slate background */
+    border-radius: 0.75rem; /* A slightly larger radius */
+    z-index: 0;
+}
+
+/* Custom spinner animation */
+.spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #ffffff;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { 
+        transform: rotate(360deg); 
+    }
+}
+
+/* For smooth scrollbars in the asset list */
+#assetList::-webkit-scrollbar {
+    width: 8px;
+}
+
+#assetList::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 10px;
+}
+
+#assetList::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+}
+
+#assetList::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
