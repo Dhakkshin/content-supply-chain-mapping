@@ -1,0 +1,5 @@
+
+----- Analysis for https://www.theguardian.com/international at 2025-10-04 17:30:57 -----
+Domain: sb.scorecardresearch.com       | IP: 18.161.229.129  | Location: Seattle, United States
+Domain: static.theguardian.com         | IP: 151.101.157.111 | Location: Chennai, India
+Domain: ophan.theguardian.com          | IP: 54.76.31.113    | Location: Dublin, Ireland
