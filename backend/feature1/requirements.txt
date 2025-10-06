@@ -7,3 +7,4 @@ webdriver-manager==4.0.1
 functions-framework==3.4.0
 google-cloud-firestore==2.11.1
 dnspython==2.2.1
+python-whois==0.8.0

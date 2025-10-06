@@ -3,7 +3,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebas
 import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 
 // --- ⚠️ CRITICAL CONFIGURATION ⚠️ ---
-// TODO: Replace with your actual Firebase project configuration.
 const firebaseConfig = {
   apiKey: "AIzaSyDij_eZ-paBlxuTnRA53X8oZK4TxRjZ3WQ",
   authDomain: "cscm-id.firebaseapp.com",
@@ -13,9 +12,11 @@ const firebaseConfig = {
   appId: "1:613113904857:web:b2ca12fd1de1655de808c8",
   measurementId: "G-PYB4H2THSE"
 };
-
-const CLOUD_FUNCTION_URL = "https://asia-south1-cscm-id.cloudfunctions.net/analyze-supply-chain";
+const CLOUD_FUNCTION_URL = "https://asia-south1-cscm-id.cloudfunctions.net/analyze-web-footprint";
 // ------------------------------------
+
+// Data for DNS Latency Heatmap
+const DNS_RESOLVER_LOCATIONS = { "Google (USA)": { lat: 37.751, lon: -97.822 }, "Cloudflare (USA)": { lat: 37.751, lon: -97.822 }, "Quad9 (Switzerland)": { lat: 47.3769, lon: 8.5417 }, "OpenDNS (USA)": { lat: 37.751, lon: -97.822 }, "Comodo (USA)": { lat: 39.0438, lon: -77.4874 }, "Yandex (Russia)": { lat: 55.7558, lon: 37.6173 }, "DNS.WATCH (Germany)": { lat: 52.5200, lon: 13.4050 }, "Level3 (USA)": { lat: 39.8617, lon: -104.6737 }, "Neustar (USA)": { lat: 39.0438, lon: -77.4874 }, "AdGuard (Cyprus)": { lat: 35.1264, lon: 33.4299 }};
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -23,245 +24,324 @@ const db = getFirestore(app);
 // --- DOM Element References ---
 const urlInput = document.getElementById('urlInput');
 const analyzeBtn = document.getElementById('analyzeBtn');
-const btnText = document.getElementById('btnText');
-const btnSpinner = document.getElementById('btnSpinner');
 const resultsSection = document.getElementById('resultsSection');
 const statusText = document.getElementById('statusText');
-const assetList = document.getElementById('assetList');
-const summaryStats = document.getElementById('summaryStats');
+const detailsPanel = document.getElementById('detailsPanel');
+const mapTitle = document.getElementById('mapTitle');
+const listTitle = document.getElementById('listTitle');
+const tabButtons = document.querySelectorAll('.tab-btn');
+const animationControls = document.getElementById('animationControls');
+const replayBtn = document.getElementById('replayBtn');
 
 // --- State Variables ---
-let currentMapLayers = []; // To manage all layers (markers, lines, etc.)
-let userLocation = null; // To store the user's coordinates
+let currentMapLayers = [];
+let currentAnalysisData = null;
+let currentView = 'loadingJourney';
+let userLocation = null;
+let unsubscribeFirestore = null;
+let animationTimeoutId = null; // ID for the current animation sequence
 
 // --- Map Initialization ---
 const map = L.map('map').setView([20, 0], 2);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: 'abcd',
-    maxZoom: 20
-}).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; <a href="https://openstreetmap.org">OSM</a> &copy; <a href="https://carto.com">CARTO</a>' }).addTo(map);
 
-// --- Main Application Logic ---
+// --- Geolocation ---
+function getUserLocation() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => { userLocation = [position.coords.latitude, position.coords.longitude]; },
+            () => { console.warn("User denied geolocation. Using fallback."); userLocation = [20, 0]; }
+        );
+    } else {
+        userLocation = [20, 0]; // Fallback location
+    }
+}
+getUserLocation();
 
-// Get user's location as soon as the page loads.
-navigator.geolocation.getCurrentPosition(position => {
-    userLocation = [position.coords.latitude, position.coords.longitude];
-    console.log("User location found:", userLocation);
-    // Add a marker for the user's location (e.g., Coimbatore)
-    L.marker(userLocation, { icon: createHomeIcon() }).addTo(map)
-      .bindPopup("Your Location")
-      .openPopup();
-    map.setView(userLocation, 5);
-}, () => {
-    // Fallback if user denies location access
-    console.log("Geolocation denied. Using fallback.");
-    userLocation = [11.0168, 76.9558]; // Fallback to Coimbatore
-    L.marker(userLocation, { icon: createHomeIcon() }).addTo(map)
-      .bindPopup("Your Approx. Location");
-});
+// --- Main Application Logic & Event Listeners ---
 
 analyzeBtn.addEventListener('click', async () => {
     const targetUrl = urlInput.value;
-    if (!targetUrl || !targetUrl.startsWith('http')) {
-        alert('Please enter a full, valid URL (e.g., https://...)');
-        return;
-    }
-
+    if (!targetUrl || !targetUrl.startsWith('http')) return alert('Please enter a full URL.');
     resetUI();
     resultsSection.style.opacity = '1';
-    
-    // Animate button state
-    btnText.textContent = 'Analyzing...';
-    btnSpinner.classList.remove('hidden');
     analyzeBtn.disabled = true;
-
+    document.getElementById('btnText').textContent = 'Analyzing...';
+    document.getElementById('btnSpinner').classList.remove('hidden');
     try {
-        statusText.textContent = "Contacting analysis server...";
+        statusText.textContent = "Contacting analysis orchestrator...";
         const response = await fetch(CLOUD_FUNCTION_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: targetUrl }),
         });
-
         if (!response.ok) throw new Error(`Server error: ${response.status}`);
-        
         const data = await response.json();
-        if (!data.analysis_id) throw new Error("Invalid response from server.");
-        
-        statusText.textContent = "Waiting for analysis data...";
         setupFirestoreListener(data.analysis_id);
-
     } catch (error) {
-        handleError(error.message);
+        statusText.textContent = `Error: ${error.message}`;
+        analyzeBtn.disabled = false;
+        document.getElementById('btnText').textContent = 'Analyze';
+        document.getElementById('btnSpinner').classList.add('hidden');
+    }
+});
+
+tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (btn.classList.contains('active')) return;
+        stopAnimation();
+        currentView = btn.dataset.view;
+        tabButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        if (currentAnalysisData) renderCurrentView();
+    });
+});
+
+replayBtn.addEventListener('click', () => {
+    if (currentAnalysisData && currentAnalysisData.assets) {
+        stopAnimation();
+        clearVisuals();
+        setupLoadingJourney(currentAnalysisData.assets);
     }
 });
 
 function setupFirestoreListener(analysisId) {
+    if (unsubscribeFirestore) unsubscribeFirestore();
     const docRef = doc(db, "analyses", analysisId);
-
-    onSnapshot(docRef, (docSnap) => {
+    unsubscribeFirestore = onSnapshot(docRef, (docSnap) => {
         if (!docSnap.exists()) return;
-        const data = docSnap.data();
-        
-        updateStatus(data.status);
-        
-        if (data.assets && data.assets.length > 0) {
-            renderAssets(data.assets);
-        }
-
-        if (data.status === 'completed' || data.status === 'error') {
-            btnText.textContent = 'Analyze';
-            btnSpinner.classList.add('hidden');
-            analyzeBtn.disabled = false;
-        }
+        currentAnalysisData = docSnap.data();
+        renderCurrentView();
+        updateStatus(currentAnalysisData);
     });
 }
 
-function renderAssets(assets) {
-    const locations = {};
-    assets.forEach(asset => {
-        const key = asset.ip;
-        if (!locations[key]) {
-            locations[key] = {
-                details: { ...asset },
-                assets: []
-            };
-        }
-        locations[key].assets.push(asset);
-    });
-
-    clearMap();
-    assetList.innerHTML = '';
-    const bounds = userLocation ? [userLocation] : [];
-
-    for (const ip in locations) {
-        const loc = locations[ip];
-        const serverCoords = [loc.details.lat, loc.details.lon];
-        
-        if (serverCoords[0] && serverCoords[1]) {
-            // 1. Add color-coded lines
-            if(userLocation) {
-                const color = getColorForISP(loc.details.isp);
-                const polyline = L.polyline([userLocation, serverCoords], { color: color, weight: 2, opacity: 0.7 }).addTo(map);
-                currentMapLayers.push(polyline);
-            }
-            
-            // 2. Add server markers
-            const marker = L.marker(serverCoords).addTo(map);
-            marker.bindPopup(`<b>${loc.details.city}, ${loc.details.country}</b><br>${loc.details.isp}<br>${loc.assets.length} assets`);
-            currentMapLayers.push(marker);
-            bounds.push(serverCoords);
-        }
-
-        // 3. Build the asset list
-        assetList.appendChild(createLocationCard(loc));
+function renderCurrentView() {
+    if (!currentAnalysisData) return;
+    clearVisuals();
+    animationControls.classList.add('hidden');
+    switch (currentView) {
+        case 'loadingJourney':
+            mapTitle.textContent = 'Geographic Loading Journey';
+            listTitle.textContent = 'Asset Origins';
+            setupLoadingJourney(currentAnalysisData.assets);
+            break;
+        case 'densityHeatmap':
+            mapTitle.textContent = 'Infrastructure Density Heatmap';
+            listTitle.textContent = 'Infrastructure Hot Zones';
+            renderDensityHeatmapView(currentAnalysisData.assets);
+            break;
+        case 'dnsLatency':
+            mapTitle.textContent = 'Global DNS Latency Heatmap';
+            listTitle.textContent = 'Resolver Performance';
+            renderDnsLatencyView(currentAnalysisData.dns_latency_results);
+            break;
     }
-    
-    // Fit map to show all points
-    if (bounds.length > 0) {
-        map.flyToBounds(bounds, { padding: L.point(50, 50) });
-    }
-
-    summaryStats.innerHTML = `
-        <p class="font-semibold">${assets.length} Assets</p>
-        <p class="text-sm text-slate-500">from ${Object.keys(locations).length} Servers</p>
-    `;
-}
-
-// --- UI Helper Functions ---
-
-function createLocationCard(locationData) {
-    const card = document.createElement('div');
-    card.className = 'border-t border-slate-200 pt-4 animate-fade-in';
-    
-    const title = document.createElement('h3');
-    title.className = 'font-bold text-md flex items-center';
-    title.innerHTML = `<span class="w-6 text-center mr-2 text-slate-400"><i class="fas fa-server"></i></span> <span>${locationData.details.city}, ${locationData.details.country}</span>`;
-    
-    const isp = document.createElement('p');
-    isp.className = 'ml-8 text-sm text-slate-500';
-    isp.textContent = locationData.details.isp;
-    
-    const list = document.createElement('ul');
-    list.className = 'ml-8 mt-2 space-y-1 text-xs';
-    
-    locationData.assets.slice(0, 5).forEach(asset => { // Show first 5 assets
-        const item = document.createElement('li');
-        item.className = 'truncate text-slate-600';
-        item.innerHTML = `<span class="font-medium bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded text-xs mr-2">${asset.type}</span> <a href="${asset.url}" target="_blank" class="hover:underline">${asset.url}</a>`;
-        list.appendChild(item);
-    });
-    
-    if(locationData.assets.length > 5) {
-        const more = document.createElement('li');
-        more.className = 'text-slate-500 italic ml-4';
-        more.textContent = `...and ${locationData.assets.length - 5} more`;
-        list.appendChild(more);
-    }
-    
-    card.append(title, isp, list);
-    return card;
-}
-
-function updateStatus(status) {
-    if (!status) return;
-    
-    if (status.startsWith('found')) {
-        statusText.textContent = `Analyzing ${status.split('_')[1]} assets...`;
-    } else if (status === 'completed') {
-        statusText.textContent = 'Analysis Complete!';
-    } else if (status === 'error') {
-        statusText.textContent = 'An error occurred.';
-    } else {
-        statusText.textContent = status.charAt(0).toUpperCase() + status.slice(1) + '...';
-    }
-}
-
-function resetUI() {
-    resultsSection.style.opacity = '0';
-    statusText.textContent = 'Preparing analysis...';
-    assetList.innerHTML = '';
-    summaryStats.innerHTML = '';
-    clearMap();
-    
-    // This is the FIX for the partially loaded map!
-    // It tells Leaflet to re-check its size after the container becomes visible.
     setTimeout(() => map.invalidateSize(), 100);
 }
 
-function handleError(message) {
-    statusText.textContent = `Error: ${message}`;
-    btnText.textContent = 'Analyze';
-    btnSpinner.classList.add('hidden');
-    analyzeBtn.disabled = false;
-}
+// --- View Rendering Functions ---
 
-function clearMap() {
-    currentMapLayers.forEach(layer => map.removeLayer(layer));
-    currentMapLayers = [];
-    if(userLocation) { // Re-add home marker
-       L.marker(userLocation, { icon: createHomeIcon() }).addTo(map).bindPopup("Your Location");
+function renderDensityHeatmapView(assets = []) {
+    const points = assets.filter(a => a.lat && a.lon).map(a => [a.lat, a.lon, 1.0]);
+    if (points.length > 0) {
+        const heatLayer = L.heatLayer(points, { 
+            radius: 35, blur: 25, maxZoom: 12, max: 1.0,
+            gradient: {0.4: 'blue', 0.7: 'lime', 0.9: 'yellow', 1.0: 'red'}
+        }).addTo(map);
+        currentMapLayers.push(heatLayer);
+        const bounds = L.latLngBounds(points);
+        if (bounds.isValid()) map.flyToBounds(bounds, { padding: L.point(50, 50), maxZoom: 10 });
     }
+    const uniqueLocations = new Set(assets.filter(a => a.lat && a.lon).map(a => `${a.city}, ${a.country}`)).size;
+    detailsPanel.innerHTML = `<div class="p-2 text-sm text-gray-600">This heatmap visualizes the geographic concentration of the <strong>${uniqueLocations}</strong> unique server locations that make up this website. Red areas indicate a high density of infrastructure.</div>`;
 }
 
-function createHomeIcon() {
-    return L.divIcon({
-        html: '<i class="fas fa-street-view text-blue-600 text-2xl"></i>',
-        className: 'bg-transparent',
-        iconSize: [24, 24],
-        iconAnchor: [12, 24]
+function renderDnsLatencyView(results = []) {
+    const points = results.map(res => {
+        const loc = DNS_RESOLVER_LOCATIONS[res.resolver_name];
+        if (!loc) return null;
+        const intensity = Math.max(0.1, 1 - (res.latency_ms / 500));
+        return [loc.lat, loc.lon, intensity];
+    }).filter(p => p !== null);
+
+    if (points.length > 0) {
+        const heatLayer = L.heatLayer(points, { 
+            radius: 50, blur: 40, maxZoom: 12, max: 1.0,
+            gradient: {0.2: '#ef4444', 0.5: '#facc15', 1.0: '#4ade80'} // Red -> Yellow -> Green
+        }).addTo(map);
+        currentMapLayers.push(heatLayer);
+        const bounds = L.latLngBounds(points.map(p => [p[0], p[1]]));
+        if (bounds.isValid()) map.flyToBounds(bounds, { padding: L.point(50, 50), maxZoom: 10 });
+    }
+
+    detailsPanel.innerHTML = '';
+    results.sort((a, b) => a.latency_ms - b.latency_ms).forEach(res => {
+        detailsPanel.innerHTML += `<div class="text-sm flex justify-between border-b border-gray-100 py-2 px-2"><p class="font-medium text-gray-900">${res.resolver_name}</p><p class="text-blue-600 font-semibold">${res.latency_ms.toFixed(0)} ms</p></div>`;
     });
 }
 
-function getColorForISP(isp) {
-    if (!isp) return '#64748b'; // slate-500
-    const lowerIsp = isp.toLowerCase();
-    if (lowerIsp.includes('google')) return '#3b82f6'; // blue-500
-    if (lowerIsp.includes('cloudflare')) return '#f97316'; // orange-500
-    if (lowerIsp.includes('amazon') || lowerIsp.includes('aws')) return '#f59e0b'; // amber-500
-    if (lowerIsp.includes('fastly')) return '#ef4444'; // red-500
-    if (lowerIsp.includes('microsoft') || lowerIsp.includes('azure')) return '#0ea5e9'; // sky-500
-    return '#64748b';
+// --- Geographic Loading Journey Functions ---
+
+function setupLoadingJourney(assets = []) {
+    stopAnimation();
+    if (!userLocation) {
+        detailsPanel.innerHTML = `<div class="p-2 text-sm text-gray-500">Please enable location access to visualize the loading journey.</div>`;
+        return;
+    }
+    const timedAssets = assets.filter(a => a.load_start_time && a.lat && a.lon)
+                              .sort((a, b) => a.load_start_time - b.load_start_time);
+    
+    if (timedAssets.length < 1) {
+        detailsPanel.innerHTML = `<div class="p-2 text-sm text-gray-500">No performance data found to build a loading journey.</div>`;
+        return;
+    }
+    
+    animationControls.classList.remove('hidden');
+    renderStaticAssetList(timedAssets);
+    startStaggeredAnimation(timedAssets);
 }
 
+function renderStaticAssetList(assets) {
+    detailsPanel.innerHTML = '';
+    const locations = {};
+    assets.forEach(asset => {
+        const locKey = `${asset.city}, ${asset.country}`;
+        if (!locations[locKey]) {
+            locations[locKey] = { details: asset, assets: [] };
+        }
+        locations[locKey].assets.push(asset);
+    });
+
+    Object.keys(locations).sort().forEach(locKey => {
+        const locData = locations[locKey];
+        const assetsHtml = locData.assets.map(asset => 
+            `<div class="flex items-center space-x-2">
+                <span class="text-xs font-mono bg-gray-200 text-gray-600 rounded px-1.5 py-0.5">${asset.type}</span>
+                <span class="text-xs text-gray-500 truncate" title="${asset.url}">${asset.url}</span>
+            </div>`
+        ).join('');
+        detailsPanel.innerHTML += 
+            `<div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <p class="font-bold text-gray-800">${locKey}</p>
+                <p class="text-xs text-gray-500 mb-2">${locData.details.isp}</p>
+                <div class="space-y-1.5">${assetsHtml}</div>
+            </div>`;
+    });
+}
+
+async function startStaggeredAnimation(assets) {
+    clearVisuals();
+    if (!userLocation) return;
+    resetAndRenderUserMarker();
+
+    const serverMarkers = new Map();
+    const allServerCoords = [];
+
+    // Pre-process to find all unique server locations and add markers
+    assets.forEach(asset => {
+        const serverCoords = [asset.lat, asset.lon];
+        const serverId = serverCoords.toString();
+        if (!serverMarkers.has(serverId)) {
+            const marker = L.marker(serverCoords).addTo(map).bindPopup(`<b>${asset.city}</b><br>${asset.isp}`);
+            serverMarkers.set(serverId, marker);
+            currentMapLayers.push(marker);
+            allServerCoords.push(serverCoords);
+        }
+    });
+
+    // Fit map to user and all server locations
+    const bounds = L.latLngBounds([userLocation, ...allServerCoords]);
+    if (bounds.isValid()) {
+        map.flyToBounds(bounds, { padding: L.point(50, 50), maxZoom: 10 });
+    }
+
+    // Animation loop
+    for (const asset of assets) {
+        const serverCoords = [asset.lat, asset.lon];
+        
+        // Animate the request path (red, dotted)
+        const reqPath = L.polyline([userLocation, serverCoords], { color: '#ef4444', weight: 1.5, className: 'request-path' }).addTo(map);
+        
+        await new Promise(resolve => {
+            animationTimeoutId = setTimeout(() => {
+                map.removeLayer(reqPath); // Remove request path
+                
+                // Animate the response path (green, solid)
+                const resPath = L.polyline([userLocation, serverCoords], { color: '#22c55e', weight: 3, className: 'response-path' }).addTo(map);
+                currentMapLayers.push(resPath); // Keep response path on map
+                
+                // Trigger CSS animation
+                const totalLength = resPath.getElement().getTotalLength();
+                resPath.getElement().style.strokeDasharray = totalLength;
+                resPath.getElement().style.strokeDashoffset = totalLength;
+                requestAnimationFrame(() => { 
+                    resPath.getElement().style.strokeDashoffset = 0;
+                });
+                
+                resolve();
+            }, 100); // 100ms delay for each asset step
+        });
+    }
+}
+
+
+// --- UI Helper Functions ---
+function stopAnimation() {
+    if (animationTimeoutId) {
+        clearTimeout(animationTimeoutId);
+        animationTimeoutId = null;
+    }
+}
+
+function clearVisuals() {
+    stopAnimation();
+    currentMapLayers.forEach(layer => map.removeLayer(layer));
+    currentMapLayers = [];
+    // Do not clear the detailsPanel here, as it's populated before the animation starts
+}
+
+function resetUI() {
+    if (unsubscribeFirestore) {
+        unsubscribeFirestore();
+        unsubscribeFirestore = null;
+    }
+    resultsSection.style.opacity = '0';
+    statusText.textContent = 'Enter a URL to begin analysis.';
+    tabButtons.forEach(b => b.classList.remove('active'));
+    document.querySelector('.tab-btn[data-view="loadingJourney"]').classList.add('active');
+    currentView = 'loadingJourney';
+    clearVisuals();
+    detailsPanel.innerHTML = ''; // Clear details panel on full reset
+    analyzeBtn.disabled = false;
+    document.getElementById('btnText').textContent = 'Analyze';
+    document.getElementById('btnSpinner').classList.add('hidden');
+}
+
+function resetAndRenderUserMarker() {
+    // We only want to clear the lines, not the markers which are now pre-loaded
+    currentMapLayers.forEach(layer => {
+        if (layer instanceof L.Polyline) {
+            map.removeLayer(layer);
+        }
+    });
+    currentMapLayers = currentMapLayers.filter(layer => !(layer instanceof L.Polyline));
+
+
+    if (userLocation) {
+        const userMarker = L.circleMarker(userLocation, { radius: 8, color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 1 }).addTo(map).bindPopup("Your Location");
+        currentMapLayers.push(userMarker);
+    }
+}
+
+function updateStatus(data) { 
+    let scStatus = data.status_supply_chain || 'pending';
+    let dnsStatus = data.status_dns_latency || 'pending';
+    if (scStatus === 'completed' && dnsStatus === 'completed') {
+        statusText.textContent = 'Analysis Complete!';
+        analyzeBtn.disabled = false;
+        document.getElementById('btnText').textContent = 'Analyze';
+        document.getElementById('btnSpinner').classList.add('hidden');
+    } else {
+        statusText.textContent = `Analyzing... [Supply Chain: ${scStatus}] [DNS: ${dnsStatus}]`;
+    }
+}
