@@ -409,21 +409,14 @@ function loadSavedAnalysis(savedId, querySnapshot) {
     };
     currentAnalysisId = data.originalId;
     
-    // Show results and update UI
-    resultsSection.classList.remove('hidden');
-    resultsSection.style.opacity = '1';
-    statusText.textContent = 'Loaded saved analysis';
-    saveAnalysisBtn.classList.add('hidden');
+    // DEBUG: Log the data structure
+    console.log("🔥 LOADED ANALYSIS DATA:", currentAnalysisData);
+    console.log("🔥 Assets length:", currentAnalysisData.assets?.length);
+    console.log("🔥 Sample asset:", currentAnalysisData.assets?.[0]);
     
-    // Update summary stats
-    if (summaryStats && data.assets) {
-        summaryStats.innerHTML = `
-            <p class="font-semibold">${data.assets.length} Assets</p>
-            <p class="text-sm text-slate-500">from ${data.countryCount} Countries</p>
-        `;
-    }
-
-    renderCurrentView();
+    // Use the unified display function
+    displayAnalysisData(currentAnalysisData, false); // false = don't show save button
+    
     savedAnalysesModal.classList.add('hidden');
     showNotification('success', 'Analysis Loaded', `Loaded analysis: ${data.title}`);
 }
@@ -442,7 +435,7 @@ function clearVisuals() {
     const existingControls = document.getElementById('playbackControls');
     if (existingControls) existingControls.remove();
     
-    // Re-add user location marker
+    // Re-add user location marker and ensure map is properly positioned
     if (userLocation) {
         const userMarker = L.circleMarker(userLocation, {
             radius: 8,
@@ -451,6 +444,12 @@ function clearVisuals() {
             fillOpacity: 1
         }).addTo(map).bindPopup("Your Location");
         currentMapLayers.push(userMarker);
+        
+        // Set a reasonable default view, but don't force it - let individual render functions set better bounds
+        map.setView(userLocation, 3);
+    } else {
+        // If no user location, set a global view
+        map.setView([20, 0], 2);
     }
 }
 
@@ -751,16 +750,21 @@ savedAnalysesBtn.addEventListener('click', () => {
 
 // --- Move renderCurrentView and setupFirestoreListener functions here ---
 function renderCurrentView() {
+    console.log("🔥 renderCurrentView called, currentView:", currentView);
+    console.log("🔥 currentAnalysisData:", currentAnalysisData);
+    
     if (!currentAnalysisData) {
-        console.log("No analysis data available yet");
+        console.log("❌ No analysis data available yet");
         return;
     }
     
     // Only render if we have some data to show
     if (!currentAnalysisData.assets || currentAnalysisData.assets.length === 0) {
-        console.log("No assets data available yet");
+        console.log("❌ No assets data available yet");
         return;
     }
+    
+    console.log("✅ About to render with", currentAnalysisData.assets.length, "assets");
     
     clearVisuals();
 
@@ -781,10 +785,31 @@ function renderCurrentView() {
             if (currentAnalysisData.dns_latency_results) {
                 renderDnsLatencyView(currentAnalysisData.dns_latency_results);
             } else {
-                detailsPanel.innerHTML = '<div class="text-sm text-gray-500">Waiting for DNS latency results...</div>';
+                detailsPanel.innerHTML = '<div class="text-sm text-gray-500">No DNS latency data available for this saved analysis.</div>';
             }
             break;
     }
+}
+
+// --- Unified Analysis Display Function ---
+function displayAnalysisData(data, showSaveButton = true) {
+    console.log("🔥 displayAnalysisData called with:", data);
+    currentAnalysisData = data;
+    
+    // Show results and update UI
+    resultsSection.classList.remove('hidden');
+    resultsSection.style.opacity = '1';
+    
+    // Show/hide save button
+    if (showSaveButton) {
+        saveAnalysisBtn.classList.remove('hidden');
+    } else {
+        saveAnalysisBtn.classList.add('hidden');
+    }
+    
+    // Update status and render view
+    updateStatus(currentAnalysisData);
+    renderCurrentView();
 }
 
 function setupFirestoreListener(analysisId) {
@@ -800,11 +825,12 @@ function setupFirestoreListener(analysisId) {
         }
         
         const data = docSnap.data();
-        console.log("Received Firestore update:", data);
+        console.log("🔥 NEW ANALYSIS DATA:", data);
+        console.log("🔥 Assets length:", data.assets?.length);
+        console.log("🔥 Sample asset:", data.assets?.[0]);
         
-        currentAnalysisData = data;
-        renderCurrentView();
-        updateStatus(currentAnalysisData);
+        // Use the unified display function
+        displayAnalysisData(data, true); // true = show save button for new analysis
     }, (error) => {
         console.error("Firestore listener error:", error);
         statusText.textContent = `Error listening for updates: ${error.message}`;
@@ -815,8 +841,23 @@ function setupFirestoreListener(analysisId) {
 // --- Density Heatmap (Asset distribution) ---
 function renderDensityHeatmapView(assets) {
     const groups = groupPointsByLatLon(assets, 'lat', 'lon');
+    
     if (groups.length === 0) {
-        detailsPanel.innerHTML = '<div class="text-sm text-gray-500">No geolocation data available.</div>';
+        // Show basic asset list instead of "no data"
+        detailsPanel.innerHTML = `
+            <div class="text-sm text-gray-500 mb-4">
+                No geolocation data available for heatmap. Showing asset list instead.
+            </div>
+            <div class="space-y-2 max-h-96 overflow-y-auto">
+                ${assets.slice(0, 50).map(asset => `
+                    <div class="text-xs border-b pb-2">
+                        <p class="font-semibold">${asset.hostname || asset.domain || 'Unknown Host'}</p>
+                        <p class="text-gray-600">${asset.isp || 'Unknown ISP'} - ${asset.city || 'Unknown Location'}</p>
+                        ${asset.ip ? `<p class="text-gray-500">${asset.ip}</p>` : ''}
+                    </div>
+                `).join('')}
+            </div>
+        `;
         return;
     }
     
@@ -837,6 +878,9 @@ function renderDensityHeatmapView(assets) {
         currentMapLayers.push(heatLayer);
 
         const coordsOnly = heatPoints.map(p => [p[0], p[1]]);
+        if (userLocation) {
+            coordsOnly.push(userLocation);
+        }
         map.flyToBounds(coordsOnly, { padding: [50, 50], maxZoom: 6 });
 
         detailsPanel.innerHTML = `
@@ -865,39 +909,54 @@ function renderDensityHeatmapView(assets) {
             currentMapLayers.push(m);
         });
         const coordsOnly = groups.map(g => [g.lat, g.lon]);
+        if (userLocation) {
+            coordsOnly.push(userLocation);
+        }
         map.flyToBounds(coordsOnly, { padding: [50, 50], maxZoom: 6 });
     }
 }
 
 // --- Loading Journey (Replayable) ---
 function renderLoadingJourneyView(assets) {
-    clearVisuals();
+    // Don't call clearVisuals() here - it's already called by renderCurrentView()
     detailsPanel.innerHTML = '';
 
-    if (!userLocation) {
-        detailsPanel.innerHTML = '<div class="text-sm text-gray-500">Enable location access to view animated loading journey.</div>';
-        // Show static markers as fallback
-        assets.filter(a => a.lat && a.lon).forEach(a => {
-            const marker = L.marker([a.lat, a.lon]).addTo(map);
-            marker.bindPopup(`<b>${a.city || 'Server'}</b><br>${a.isp || ''}`);
-            currentMapLayers.push(marker);
-        });
-        return;
+    // Always show static markers for all assets with coordinates
+    const assetsWithCoords = assets.filter(a => a.lat && a.lon);
+    
+    assetsWithCoords.forEach(a => {
+        const marker = L.marker([a.lat, a.lon]).addTo(map);
+        marker.bindPopup(`<b>${a.city || 'Server'}</b><br>${a.isp || a.domain || ''}`);
+        currentMapLayers.push(marker);
+    });
+    
+    // Set map bounds to show all markers
+    if (assetsWithCoords.length > 0) {
+        const coords = assetsWithCoords.map(a => [a.lat, a.lon]);
+        if (userLocation) {
+            coords.push(userLocation);
+        }
+        map.flyToBounds(coords, { padding: [50, 50], maxZoom: 10 });
     }
 
+    // Always try to show timeline data, even without user location
     timelineEvents = buildTimelineFromAssets(assets);
-    if (timelineEvents.length === 0) {
-        detailsPanel.innerHTML = '<div class="text-sm text-gray-500">No performance timeline data available.</div>';
-        return;
+    
+    if (userLocation && timelineEvents.length > 0) {
+        // Full interactive timeline with playback controls
+        timelineIndex = 0;
+        playbackBaseTime = timelineEvents[0].time;
+        isPlaying = false;
+        playbackSpeed = 1.0;
+        ensurePlaybackControls();
+        renderTimelineList();
+    } else if (timelineEvents.length > 0) {
+        // Static timeline without playback controls (no user location)
+        renderStaticTimelineList();
+    } else {
+        // Fallback: show basic asset list
+        renderBasicAssetList(assets);
     }
-
-    timelineIndex = 0;
-    playbackBaseTime = timelineEvents[0].time;
-    isPlaying = false;
-    playbackSpeed = 1.0;
-    ensurePlaybackControls();
-
-    renderTimelineList();
 
     const bounds = [userLocation, ...timelineEvents.filter(e => e.coords).map(e => e.coords)];
     map.flyToBounds(bounds, { padding: [50, 50] });
@@ -970,6 +1029,68 @@ function renderTimelineList() {
             }
         });
     }
+
+    detailsPanel.innerHTML = '';
+    detailsPanel.appendChild(list);
+}
+
+function renderStaticTimelineList() {
+    const list = document.createElement('div');
+    list.className = 'space-y-1 text-xs max-h-96 overflow-y-auto';
+    
+    const header = document.createElement('div');
+    header.className = 'mb-4 pb-2 border-b';
+    header.innerHTML = `
+        <div class="text-sm font-medium">Timeline Events</div>
+        <div class="text-xs text-gray-500 mt-1">Interactive playback requires location access</div>
+    `;
+    list.appendChild(header);
+
+    timelineEvents.slice(0, 200).forEach((ev, idx) => {
+        const row = document.createElement('div');
+        row.className = 'flex justify-between items-center py-1 border-b border-slate-100';
+        row.innerHTML = `
+            <div class="truncate flex-1">
+                <span class="font-semibold ${ev.type === 'request' ? 'text-blue-600' : 'text-green-600'}">
+                    ${ev.type === 'request' ? 'REQ' : 'RES'}
+                </span> - ${ev.asset.hostname || ev.asset.url || ev.asset.ip || 'Unknown'}
+            </div>
+            <div class="text-slate-500 ml-2">${ev.time.toFixed(0)}ms</div>
+        `;
+        list.appendChild(row);
+    });
+
+    detailsPanel.innerHTML = '';
+    detailsPanel.appendChild(list);
+}
+
+function renderBasicAssetList(assets) {
+    const list = document.createElement('div');
+    list.className = 'space-y-1 text-xs max-h-96 overflow-y-auto';
+    
+    const header = document.createElement('div');
+    header.className = 'mb-4 pb-2 border-b';
+    header.innerHTML = `
+        <div class="text-sm font-medium" style="color: red;">🔥 FIXED RIGHT PANEL - Assets Found</div>
+        <div class="text-xs text-gray-500 mt-1">${assets.length} total assets</div>
+    `;
+    list.appendChild(header);
+
+    assets.slice(0, 100).forEach((asset, idx) => {
+        const row = document.createElement('div');
+        row.className = 'flex justify-between items-center py-1 border-b border-slate-100';
+        row.innerHTML = `
+            <div class="truncate flex-1">
+                <span class="font-semibold text-blue-600">${asset.hostname || asset.domain || 'Unknown Host'}</span>
+                ${asset.city ? `<br><span class="text-gray-500">${asset.city}, ${asset.country || ''}</span>` : ''}
+            </div>
+            <div class="text-slate-500 ml-2 text-right">
+                ${asset.isp ? `<div>${asset.isp}</div>` : ''}
+                ${asset.ip ? `<div class="text-xs">${asset.ip}</div>` : ''}
+            </div>
+        `;
+        list.appendChild(row);
+    });
 
     detailsPanel.innerHTML = '';
     detailsPanel.appendChild(list);
