@@ -1,83 +1,161 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Global Web Footprint Analyzer</title>
-    
+
     <!-- External Libraries -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
-    
+    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
+    />
+
+    <!-- Advanced Visualization Libraries -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
     <!-- Your Custom Stylesheet -->
-    <link rel="stylesheet" href="style.css">
-</head>
-<body class="bg-gray-50 text-gray-800">
-
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      .spinner {
+        border-top-color: transparent;
+        border-left-color: #3b82f6;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      #map {
+        height: 420px;
+        width: 100%;
+        border-radius: 0.5rem;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100 text-gray-800">
     <div class="container mx-auto p-4 md:p-8 max-w-7xl">
-        <!-- Header -->
-        <header class="flex items-center gap-4 mb-8">
-            <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
-                <i class="fas fa-globe-americas text-2xl text-blue-600"></i>
-            </div>
-            <div>
-                <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Global Web Footprint Analyzer</h1>
-                <p class="text-sm text-gray-500">Visualize a website's global infrastructure, performance, and loading journey.</p>
-            </div>
-        </header>
-
-        <!-- Input Section -->
-        <div class="bg-white p-4 rounded-xl shadow-lg border border-gray-200 mb-8">
-            <div class="flex flex-col sm:flex-row gap-3">
-                <input type="text" id="urlInput" placeholder="Enter a full URL (e.g., https://www.theguardian.com)" class="flex-grow bg-gray-100 p-3 px-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-gray-900">
-                <button id="analyzeBtn" class="bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition flex items-center justify-center shadow-md hover:shadow-lg transform hover:-translate-y-px">
-                    <span id="btnText">Analyze</span>
-                    <div id="btnSpinner" class="spinner w-5 h-5 ml-3 hidden"></div>
-                </button>
-            </div>
+      <!-- Header -->
+      <header class="flex items-center gap-4 mb-8">
+        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+          <i class="fas fa-globe-americas text-2xl text-blue-600"></i>
         </div>
-        
-        <!-- Results Section -->
-        <div id="resultsSection" class="opacity-0 transition-opacity duration-500">
-            <!-- Tab Navigation -->
-            <div class="mb-4 border-b border-gray-200">
-                <nav class="-mb-px flex space-x-6" aria-label="Tabs">
-                    <button class="tab-btn active" data-view="loadingJourney">Loading Journey</button>
-                    <button class="tab-btn" data-view="densityHeatmap">Infrastructure Density</button>
-                    <button class="tab-btn" data-view="dnsLatency">DNS Performance</button>
-                </nav>
-            </div>
-            
-            <p id="statusText" class="text-gray-500 text-sm mb-4 h-5">Enter a URL to begin analysis.</p>
-
-            <!-- Main Content Grid -->
-            <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                <!-- Map Visualization -->
-                <div class="lg:col-span-3 bg-white p-4 rounded-xl shadow-lg border border-gray-200 relative">
-                    <h2 id="mapTitle" class="text-xl font-bold mb-4 text-gray-900"></h2>
-                    <div id="map"></div>
-                    <!-- NEW: Simplified Replay Button -->
-                     <div id="animationControls" class="absolute bottom-6 right-6 bg-white/80 backdrop-blur-sm p-2 rounded-lg shadow-md border border-gray-200 hidden items-center gap-3">
-                        <button id="replayBtn" class="p-2 text-gray-600 hover:text-blue-600 transition" title="Replay Animation"><i class="fas fa-redo"></i></button>
-                    </div>
-                </div>
-
-                <!-- Details List -->
-                <div class="lg:col-span-2 bg-white p-4 rounded-xl shadow-lg border border-gray-200">
-                    <h2 id="listTitle" class="text-xl font-bold mb-4 text-gray-900"></h2>
-                    <div id="detailsPanel" class="space-y-3 max-h-[460px] overflow-y-auto pr-2">
-                        <!-- Content dynamically inserted here -->
-                    </div>
-                </div>
-            </div>
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900 tracking-tight">
+            Global Web Footprint Analyzer
+          </h1>
+          <p class="text-sm text-gray-500">
+            Visualize a website's global infrastructure, performance, and
+            loading journey.
+          </p>
         </div>
+      </header>
+
+      <!-- Input Section -->
+      <div
+        class="bg-white p-4 rounded-xl shadow-lg border border-gray-200 mb-8"
+      >
+        <div class="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            id="urlInput"
+            placeholder="Enter a full URL (e.g., https://www.theguardian.com)"
+            class="flex-grow bg-gray-100 p-3 px-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-gray-900"
+          />
+          <button
+            id="analyzeBtn"
+            class="bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition flex items-center justify-center shadow-md hover:shadow-lg transform hover:-translate-y-px"
+          >
+            <span id="btnText">Analyze</span>
+            <div id="btnSpinner" class="spinner w-5 h-5 ml-3 hidden"></div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Results Section -->
+      <div id="resultsSection" class="hidden">
+        <!-- Status Bar -->
+        <div
+          id="statusContainer"
+          class="bg-white p-4 rounded-lg shadow-md mb-6 flex items-center justify-between"
+        >
+          <div class="flex items-center">
+            <div
+              id="spinner"
+              class="spinner w-6 h-6 rounded-full border-4 border-gray-300 mr-3"
+            ></div>
+            <p id="statusText" class="text-gray-700 font-medium">
+              Waiting for analysis data...
+            </p>
+          </div>
+          <div class="text-right flex items-center gap-3">
+            <div id="summaryStats"></div>
+            <button
+              id="refreshBtn"
+              class="hidden text-sm text-blue-600 hover:underline"
+            >
+              Refresh status
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="bg-white p-3 rounded-lg shadow-sm mb-4 flex gap-2">
+          <button
+            class="tab-btn active px-3 py-1.5 rounded bg-blue-600 text-white text-sm"
+            data-view="loadingJourney"
+          >
+            Loading Journey
+          </button>
+          <button
+            class="tab-btn px-3 py-1.5 rounded bg-slate-100 text-slate-800 text-sm"
+            data-view="densityHeatmap"
+          >
+            Asset Density Heatmap
+          </button>
+          <button
+            class="tab-btn px-3 py-1.5 rounded bg-slate-100 text-slate-800 text-sm"
+            data-view="dnsLatency"
+          >
+            DNS Heatmap
+          </button>
+        </div>
+
+        <!-- Main Content: Map and Details -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <!-- Map Visualization -->
+          <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 id="mapTitle" class="text-2xl font-bold mb-4">
+              Geographic Loading Journey
+            </h2>
+            <div id="map"></div>
+          </div>
+
+          <!-- Details Panel -->
+          <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 id="listTitle" class="text-2xl font-bold mb-4">
+              Loading Timeline
+            </h2>
+            <div
+              id="detailsPanel"
+              class="space-y-2 max-h-[460px] overflow-y-auto pr-2"
+            ></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Your Custom JavaScript (as a module) -->
     <script src="script.js" type="module"></script>
-</body>
+  </body>
 </html>
-

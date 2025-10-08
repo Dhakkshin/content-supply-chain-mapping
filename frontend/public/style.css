@@ -4,9 +4,9 @@ body {
     font-family: 'Inter', sans-serif;
 }
 
-#map {
+#vis-content-area, #map {
     height: 500px;
-    background-color: #e5e7eb; /* gray-200 */
+    background-color: #f9fafb; /* gray-50 */
     border-radius: 0.75rem;
     z-index: 0;
 }
@@ -28,29 +28,108 @@ body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-#detailsPanel::-webkit-scrollbar { width: 8px; }
-#detailsPanel::-webkit-scrollbar-track { background: #f3f4f6; border-radius: 10px; }
-#detailsPanel::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
-#detailsPanel::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+#detailsPanel::-webkit-scrollbar, .waterfall-chart-container::-webkit-scrollbar { width: 8px; }
+#detailsPanel::-webkit-scrollbar-track, .waterfall-chart-container::-webkit-scrollbar-track { background: #f3f4f6; border-radius: 10px; }
+#detailsPanel::-webkit-scrollbar-thumb, .waterfall-chart-container::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+#detailsPanel::-webkit-scrollbar-thumb:hover, .waterfall-chart-container::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 
+/* Tab styles - replacing @apply with standard CSS */
 .tab-btn {
-    @apply whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors;
+    white-space: nowrap;
+    padding: 0.75rem 0.25rem;
+    border-bottom: 2px solid transparent;
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: #6b7280; /* gray-500 */
+    transition: color 0.15s, border-color 0.15s;
+}
+.tab-btn:hover {
+    color: #374151; /* gray-700 */
+    border-bottom-color: #d1d5db; /* gray-300 */
 }
 .tab-btn.active {
-    @apply border-blue-600 text-blue-600;
+    border-bottom-color: #2563eb; /* blue-600 */
+    color: #2563eb; /* blue-600 */
 }
 
-/* NEW: Animation classes for the staggered reveal */
+/* Sub-tab styles - replacing @apply with standard CSS */
+.subtab-btn {
+    width: 100%;
+    text-align: center;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: 0.375rem;
+    color: #4b5563; /* gray-600 */
+    transition: background-color 0.15s, color 0.15s;
+}
+.subtab-btn:hover {
+    background-color: #e5e7eb; /* gray-200 */
+}
+.subtab-btn.active {
+    background-color: #ffffff;
+    color: #2563eb; /* blue-600 */
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+@media (min-width: 640px) {
+    .subtab-btn {
+        width: auto;
+    }
+}
+
+/* Line animation styles */
+.response-path {
+    transition: stroke-dashoffset 0.5s ease-out;
+}
 .request-path {
     stroke-dasharray: 4, 4;
-    animation: dash 1s linear infinite;
 }
 
-@keyframes dash {
-  to { stroke-dashoffset: 8; }
+/* D3/Chart.js Visualization Styles */
+.vis-container {
+    width: 100%;
+    height: 100%;
+    min-height: 500px;
 }
-
-.response-path {
-    transition: stroke-dashoffset 0.6s ease-out;
+.treemap-label {
+    fill: white;
+    font-size: 10px;
+    pointer-events: none;
+    text-shadow: 0 0 2px rgba(0,0,0,0.7);
+}
+.radial-text {
+    font-size: 10px;
+    fill: #4b5563; /* gray-600 */
+}
+.waterfall-chart-container {
+    height: 500px;
+    overflow-x: hidden;
+    overflow-y: scroll;
+    position: relative;
+}
+.chartjs-tooltip {
+    opacity: 1;
+    pointer-events: none;
+    position: absolute;
+    background: rgba(31, 41, 55, 0.8); /* gray-800 */
+    color: white;
+    border-radius: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 12px;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    transition: all .1s ease-in-out;
+}
+.d3-tooltip {
+    position: absolute;
+    text-align: center;
+    padding: 6px;
+    font: 12px sans-serif;
+    background: rgba(31, 41, 55, 0.8);
+    color: white;
+    border: 0px;
+    border-radius: 8px;
+    pointer-events: none;
+    opacity: 0;
 }
 
