@@ -33,23 +33,27 @@ body {
 #detailsPanel::-webkit-scrollbar-thumb, .waterfall-chart-container::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
 #detailsPanel::-webkit-scrollbar-thumb:hover, .waterfall-chart-container::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 
-/* Tab styles - replacing @apply with standard CSS */
+/* Tab styles - fixed for better visibility */
 .tab-btn {
     white-space: nowrap;
-    padding: 0.75rem 0.25rem;
-    border-bottom: 2px solid transparent;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
     font-weight: 500;
     font-size: 0.875rem;
-    color: #6b7280; /* gray-500 */
-    transition: color 0.15s, border-color 0.15s;
+    color: #64748b; /* slate-500 */
+    background-color: #f1f5f9; /* slate-100 */
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
 }
 .tab-btn:hover {
-    color: #374151; /* gray-700 */
-    border-bottom-color: #d1d5db; /* gray-300 */
+    color: #334155; /* slate-700 */
+    background-color: #e2e8f0; /* slate-200 */
 }
 .tab-btn.active {
-    border-bottom-color: #2563eb; /* blue-600 */
-    color: #2563eb; /* blue-600 */
+    background-color: #2563eb; /* blue-600 */
+    color: #ffffff !important; /* Force white text */
+    border-color: #1d4ed8; /* blue-700 */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 /* Sub-tab styles - replacing @apply with standard CSS */
@@ -131,5 +135,57 @@ body {
     border-radius: 8px;
     pointer-events: none;
     opacity: 0;
+}
+
+/* Modal and Toast styles */
+.modal-overlay {
+    backdrop-filter: blur(4px);
+}
+
+/* Toast animations */
+#notificationToast {
+    transform: translateX(100%);
+    transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+}
+
+#notificationToast:not(.hidden) {
+    transform: translateX(0);
+}
+
+/* Modal fade-in animation */
+#saveAnalysisModal:not(.hidden),
+#savedAnalysesModal:not(.hidden) {
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Focus styles for accessibility */
+#analysisTitle:focus {
+    outline: none;
+    ring: 2px;
+    ring-color: #3b82f6;
+    border-color: #3b82f6;
+}
+
+/* Hover effects for interactive elements */
+.cursor-pointer:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Asset selection styles */
+.asset-selected {
+    background-color: #dbeafe !important; /* blue-100 */
+    border-color: #3b82f6 !important; /* blue-500 */
 }
 

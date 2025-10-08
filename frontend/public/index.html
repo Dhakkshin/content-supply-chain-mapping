@@ -46,19 +46,29 @@
   <body class="bg-gray-100 text-gray-800">
     <div class="container mx-auto p-4 md:p-8 max-w-7xl">
       <!-- Header -->
-      <header class="flex items-center gap-4 mb-8">
-        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
-          <i class="fas fa-globe-americas text-2xl text-blue-600"></i>
+      <header class="flex items-center justify-between mb-8">
+        <div class="flex items-center gap-4">
+          <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+            <i class="fas fa-globe-americas text-2xl text-blue-600"></i>
+          </div>
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900 tracking-tight">
+              Global Web Footprint Analyzer
+            </h1>
+            <p class="text-sm text-gray-500">
+              Visualize a website's global infrastructure, performance, and
+              loading journey.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 class="text-2xl font-bold text-gray-900 tracking-tight">
-            Global Web Footprint Analyzer
-          </h1>
-          <p class="text-sm text-gray-500">
-            Visualize a website's global infrastructure, performance, and
-            loading journey.
-          </p>
-        </div>
+        <!-- Saved Analyses Button -->
+        <button
+          id="savedAnalysesBtn"
+          class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition flex items-center gap-2"
+        >
+          <i class="fas fa-bookmark"></i>
+          <span>Saved Analyses</span>
+        </button>
       </header>
 
       <!-- Input Section -->
@@ -100,6 +110,13 @@
           </div>
           <div class="text-right flex items-center gap-3">
             <div id="summaryStats"></div>
+            <!-- Save Analysis Button -->
+            <button
+              id="saveAnalysisBtn"
+              class="hidden bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition"
+            >
+              <i class="fas fa-save mr-1"></i> Save Analysis
+            </button>
             <button
               id="refreshBtn"
               class="hidden text-sm text-blue-600 hover:underline"
@@ -112,19 +129,19 @@
         <!-- Tabs -->
         <div class="bg-white p-3 rounded-lg shadow-sm mb-4 flex gap-2">
           <button
-            class="tab-btn active px-3 py-1.5 rounded bg-blue-600 text-white text-sm"
+            class="tab-btn active px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-medium"
             data-view="loadingJourney"
           >
             Loading Journey
           </button>
           <button
-            class="tab-btn px-3 py-1.5 rounded bg-slate-100 text-slate-800 text-sm"
+            class="tab-btn px-3 py-1.5 rounded bg-slate-100 text-slate-800 text-sm font-medium"
             data-view="densityHeatmap"
           >
             Asset Density Heatmap
           </button>
           <button
-            class="tab-btn px-3 py-1.5 rounded bg-slate-100 text-slate-800 text-sm"
+            class="tab-btn px-3 py-1.5 rounded bg-slate-100 text-slate-800 text-sm font-medium"
             data-view="dnsLatency"
           >
             DNS Heatmap
@@ -151,6 +168,102 @@
               class="space-y-2 max-h-[460px] overflow-y-auto pr-2"
             ></div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Saved Analyses Modal -->
+    <div
+      id="savedAnalysesModal"
+      class="fixed inset-0 bg-black bg-opacity-50 hidden z-50"
+    >
+      <div class="flex items-center justify-center min-h-screen p-4">
+        <div
+          class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
+        >
+          <div class="flex items-center justify-between p-6 border-b">
+            <h2 class="text-xl font-bold">Saved Analyses</h2>
+            <button
+              id="closeSavedModal"
+              class="text-gray-500 hover:text-gray-700"
+            >
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+          <div id="savedAnalysesList" class="p-6 overflow-y-auto max-h-[60vh]">
+            <div class="text-center text-gray-500">
+              Loading saved analyses...
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Save Analysis Modal -->
+    <div
+      id="saveAnalysisModal"
+      class="fixed inset-0 bg-black bg-opacity-50 hidden z-50"
+    >
+      <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+          <div class="flex items-center justify-between p-6 border-b">
+            <h2 class="text-xl font-bold">Save Analysis</h2>
+            <button
+              id="closeSaveModal"
+              class="text-gray-500 hover:text-gray-700"
+            >
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+          <div class="p-6">
+            <label
+              for="analysisTitle"
+              class="block text-sm font-medium text-gray-700 mb-2"
+            >
+              Analysis Title
+            </label>
+            <input
+              type="text"
+              id="analysisTitle"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter a title for this analysis"
+            />
+            <div class="flex justify-end gap-3 mt-6">
+              <button
+                id="cancelSave"
+                class="px-4 py-2 text-gray-600 hover:text-gray-800 transition"
+              >
+                Cancel
+              </button>
+              <button
+                id="confirmSave"
+                class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
+              >
+                Save Analysis
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notificationToast" class="fixed top-4 right-4 z-50 hidden">
+      <div class="bg-white border-l-4 rounded-lg shadow-lg p-4 max-w-sm">
+        <div class="flex items-center">
+          <div id="toastIcon" class="flex-shrink-0 mr-3">
+            <!-- Icon will be inserted here -->
+          </div>
+          <div class="flex-1">
+            <p id="toastTitle" class="font-medium text-gray-900"></p>
+            <p id="toastMessage" class="text-sm text-gray-600 mt-1"></p>
+          </div>
+          <button
+            id="closeToast"
+            class="ml-3 text-gray-400 hover:text-gray-600"
+          >
+            <i class="fas fa-times"></i>
+          </button>
         </div>
       </div>
     </div>
