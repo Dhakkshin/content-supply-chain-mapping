@@ -29,6 +29,9 @@ const listTitle = document.getElementById('listTitle');
 const tabButtons = document.querySelectorAll('.tab-btn');
 const summaryStats = document.getElementById('summaryStats');
 const saveAnalysisBtn = document.getElementById('saveAnalysisBtn');
+const analysisTitleDisplay = document.getElementById('analysisTitleDisplay');
+const analysisTitleText = document.getElementById('analysisTitleText');
+const spinner = document.getElementById('spinner');
 const savedAnalysesBtn = document.getElementById('savedAnalysesBtn');
 const savedAnalysesModal = document.getElementById('savedAnalysesModal');
 const closeSavedModal = document.getElementById('closeSavedModal');
@@ -45,6 +48,52 @@ const toastIcon = document.getElementById('toastIcon');
 const toastTitle = document.getElementById('toastTitle');
 const toastMessage = document.getElementById('toastMessage');
 const closeToast = document.getElementById('closeToast');
+
+// Confirmation modal elements
+const confirmationModal = document.getElementById('confirmationModal');
+const confirmTitle = document.getElementById('confirmTitle');
+const confirmMessage = document.getElementById('confirmMessage');
+const confirmCancel = document.getElementById('confirmCancel');
+const confirmProceed = document.getElementById('confirmProceed');
+
+// --- Unsaved Changes Detection ---
+let hasUnsavedChanges = false;
+let isAnalysisSaved = false;
+
+// Check for unsaved changes before page unload
+window.addEventListener('beforeunload', (e) => {
+    if (hasUnsavedChanges && !isAnalysisSaved && currentAnalysisData) {
+        e.preventDefault();
+        e.returnValue = 'You have an unsaved analysis. Are you sure you want to leave?';
+        return e.returnValue;
+    }
+});
+
+// Custom confirmation dialog
+function showConfirmation(title, message) {
+    return new Promise((resolve) => {
+        confirmTitle.textContent = title;
+        confirmMessage.textContent = message;
+        confirmationModal.classList.remove('hidden');
+        
+        const handleCancel = () => {
+            confirmationModal.classList.add('hidden');
+            confirmCancel.removeEventListener('click', handleCancel);
+            confirmProceed.removeEventListener('click', handleProceed);
+            resolve(false);
+        };
+        
+        const handleProceed = () => {
+            confirmationModal.classList.add('hidden');
+            confirmCancel.removeEventListener('click', handleCancel);
+            confirmProceed.removeEventListener('click', handleProceed);
+            resolve(true);
+        };
+        
+        confirmCancel.addEventListener('click', handleCancel);
+        confirmProceed.addEventListener('click', handleProceed);
+    });
+}
 
 // --- State Variables ---
 let currentMapLayers = [];
@@ -197,6 +246,17 @@ analyzeBtn.addEventListener('click', async () => {
     const targetUrl = urlInput.value.trim();
     if (!validateUrl(targetUrl)) return;
     
+    // Check for unsaved changes
+    if (hasUnsavedChanges && !isAnalysisSaved && currentAnalysisData) {
+        const userConfirmed = await showConfirmation(
+            'Unsaved Changes',
+            'You have an unsaved analysis. Starting a new analysis will lose your current data. Do you want to continue?'
+        );
+        if (!userConfirmed) {
+            return;
+        }
+    }
+    
     resultsSection.classList.remove('hidden');
     resetUI();
     resultsSection.style.opacity = '1';
@@ -245,6 +305,7 @@ function closeSaveModalFunc() {
 
 async function saveCurrentAnalysis() {
     const title = analysisTitle.value.trim();
+    console.log('Saving analysis with title:', title);
     if (!title) {
         showNotification('warning', 'Title Required', 'Please enter a title for this analysis');
         analysisTitle.focus();
@@ -273,6 +334,10 @@ async function saveCurrentAnalysis() {
         closeSaveModalFunc();
         showNotification('success', 'Analysis Saved', 'Your analysis has been saved successfully!');
         
+        // Clear unsaved changes flag
+        hasUnsavedChanges = false;
+        isAnalysisSaved = true;
+        
     } catch (error) {
         console.error('Detailed error saving analysis:', error);
         
@@ -295,6 +360,10 @@ async function saveCurrentAnalysis() {
             
             closeSaveModalFunc();
             showNotification('success', 'Analysis Saved', 'Your analysis has been saved successfully!');
+            
+            // Clear unsaved changes flag
+            hasUnsavedChanges = false;
+            isAnalysisSaved = true;
             
         } catch (fallbackError) {
             console.error('Fallback save also failed:', fallbackError);
@@ -380,7 +449,18 @@ async function loadSavedAnalyses() {
 
         // Add click handlers
         savedAnalysesList.querySelectorAll('[data-analysis-id]').forEach(item => {
-            item.addEventListener('click', () => {
+            item.addEventListener('click', async () => {
+                // Check for unsaved changes before loading saved analysis
+                if (hasUnsavedChanges && !isAnalysisSaved && currentAnalysisData) {
+                    const userConfirmed = await showConfirmation(
+                        'Unsaved Changes',
+                        'You have an unsaved analysis. Loading this saved analysis will lose your current data. Do you want to continue?'
+                    );
+                    if (!userConfirmed) {
+                        return;
+                    }
+                }
+                
                 const analysisId = item.dataset.analysisId;
                 loadSavedAnalysis(analysisId, querySnapshot);
             });
@@ -409,13 +489,22 @@ function loadSavedAnalysis(savedId, querySnapshot) {
     };
     currentAnalysisId = data.originalId;
     
-    // DEBUG: Log the data structure
-    console.log("🔥 LOADED ANALYSIS DATA:", currentAnalysisData);
-    console.log("🔥 Assets length:", currentAnalysisData.assets?.length);
-    console.log("🔥 Sample asset:", currentAnalysisData.assets?.[0]);
+
     
-    // Use the unified display function
-    displayAnalysisData(currentAnalysisData, false); // false = don't show save button
+    // Use the unified display function with title
+    displayAnalysisData(currentAnalysisData, false, data.title || 'Saved Analysis'); // false = don't show save button
+    
+    // Force UI refresh after loading saved analysis
+    setTimeout(() => {
+        // Force map to recalculate size
+        if (map) {
+            map.invalidateSize();
+        }
+        // Force layout recalculation
+        resultsSection.style.display = 'none';
+        resultsSection.offsetHeight; // Trigger reflow
+        resultsSection.style.display = '';
+    }, 100);
     
     savedAnalysesModal.classList.add('hidden');
     showNotification('success', 'Analysis Loaded', `Loaded analysis: ${data.title}`);
@@ -456,12 +545,31 @@ function clearVisuals() {
 function resetUI() {
     resultsSection.style.opacity = '0';
     statusText.textContent = 'Enter a URL to begin analysis.';
+    
+    // Clear previously loaded data
+    currentAnalysisData = null;
+    currentAnalysisId = null;
+    
+    // Reset unsaved changes flags
+    hasUnsavedChanges = false;
+    isAnalysisSaved = false;
+    
+    // Hide analysis title display
+    if (analysisTitleDisplay) {
+        analysisTitleDisplay.classList.add('hidden');
+    }
+    
+    // Show spinner for new analysis
+    if (spinner) {
+        spinner.style.display = 'inline-block';
+    }
+    
     tabButtons.forEach(b => {
-        b.classList.remove('active', 'bg-blue-600', 'text-white');
-        b.classList.add('bg-slate-100', 'text-slate-800');
+        b.classList.remove('active', 'border-blue-500', 'text-blue-600');
+        b.classList.add('border-transparent', 'text-gray-500');
     });
-    document.querySelector('.tab-btn[data-view="loadingJourney"]').classList.remove('bg-slate-100', 'text-slate-800');
-    document.querySelector('.tab-btn[data-view="loadingJourney"]').classList.add('active', 'bg-blue-600', 'text-white');
+    document.querySelector('.tab-btn[data-view="loadingJourney"]').classList.remove('border-transparent', 'text-gray-500');
+    document.querySelector('.tab-btn[data-view="loadingJourney"]').classList.add('active', 'border-blue-500', 'text-blue-600');
     currentView = 'loadingJourney';
     clearVisuals();
     setTimeout(() => map.invalidateSize(), 500);
@@ -673,12 +781,7 @@ function processTimelineEvent(ev) {
             dashArray: '6,8'
         }).addTo(map);
         
-        const mk = L.circleMarker(ev.coords, {
-            radius: 5,
-            color,
-            fillColor: color,
-            fillOpacity: 0.9
-        }).addTo(map);
+        const mk = L.marker(ev.coords).addTo(map);
         
         currentMapLayers.push(reqLine, mk);
         activeRequestLines[ev.id] = { requestLayer: reqLine, requestMarker: mk, responseLayer: null };
@@ -727,44 +830,48 @@ function getColorForISP(isp) {
     return '#64748b';
 }
 
-// --- Tab switching (Fixed for visibility) ---
+// --- Tab switching (Updated for new design) ---
 tabButtons.forEach(btn => {
     btn.addEventListener('click', () => {
         currentView = btn.dataset.view;
         selectedAssetId = null; // Clear selection when switching tabs
         
         tabButtons.forEach(b => {
-            b.classList.remove('active', 'bg-blue-600', 'text-white');
-            b.classList.add('bg-slate-100', 'text-slate-800');
+            b.classList.remove('active', 'border-blue-500', 'text-blue-600');
+            b.classList.add('border-transparent', 'text-gray-500');
         });
-        btn.classList.remove('bg-slate-100', 'text-slate-800');
-        btn.classList.add('active', 'bg-blue-600', 'text-white');
+        btn.classList.remove('border-transparent', 'text-gray-500');
+        btn.classList.add('active', 'border-blue-500', 'text-blue-600');
         renderCurrentView();
     });
 });
 
-savedAnalysesBtn.addEventListener('click', () => {
+savedAnalysesBtn.addEventListener('click', async () => {
+    // Check for unsaved changes before opening saved analyses
+    if (hasUnsavedChanges && !isAnalysisSaved && currentAnalysisData) {
+        const userConfirmed = await showConfirmation(
+            'Unsaved Changes',
+            'You have an unsaved analysis. Loading a saved analysis will lose your current data. Do you want to continue?'
+        );
+        if (!userConfirmed) {
+            return;
+        }
+    }
+    
     savedAnalysesModal.classList.remove('hidden');
     loadSavedAnalyses();
 });
 
 // --- Move renderCurrentView and setupFirestoreListener functions here ---
 function renderCurrentView() {
-    console.log("🔥 renderCurrentView called, currentView:", currentView);
-    console.log("🔥 currentAnalysisData:", currentAnalysisData);
-    
     if (!currentAnalysisData) {
-        console.log("❌ No analysis data available yet");
         return;
     }
     
     // Only render if we have some data to show
     if (!currentAnalysisData.assets || currentAnalysisData.assets.length === 0) {
-        console.log("❌ No assets data available yet");
         return;
     }
-    
-    console.log("✅ About to render with", currentAnalysisData.assets.length, "assets");
     
     clearVisuals();
 
@@ -792,13 +899,35 @@ function renderCurrentView() {
 }
 
 // --- Unified Analysis Display Function ---
-function displayAnalysisData(data, showSaveButton = true) {
-    console.log("🔥 displayAnalysisData called with:", data);
+function displayAnalysisData(data, showSaveButton = true, title = null) {
     currentAnalysisData = data;
+    
+    // Set unsaved changes flag for new analyses
+    if (showSaveButton) {
+        hasUnsavedChanges = true;
+        isAnalysisSaved = false;
+    } else {
+        // For loaded analyses, consider them already saved
+        hasUnsavedChanges = false;
+        isAnalysisSaved = true;
+    }
     
     // Show results and update UI
     resultsSection.classList.remove('hidden');
     resultsSection.style.opacity = '1';
+    
+    // Stop spinner for both new and loaded analyses (analysis is complete)
+    if (spinner) {
+        spinner.style.display = 'none';
+    }
+    
+    // Show analysis title if provided (for loaded analysis)
+    if (title && analysisTitleDisplay && analysisTitleText) {
+        analysisTitleText.textContent = title;
+        analysisTitleDisplay.classList.remove('hidden');
+    } else if (analysisTitleDisplay) {
+        analysisTitleDisplay.classList.add('hidden');
+    }
     
     // Show/hide save button
     if (showSaveButton) {
@@ -825,9 +954,7 @@ function setupFirestoreListener(analysisId) {
         }
         
         const data = docSnap.data();
-        console.log("🔥 NEW ANALYSIS DATA:", data);
-        console.log("🔥 Assets length:", data.assets?.length);
-        console.log("🔥 Sample asset:", data.assets?.[0]);
+
         
         // Use the unified display function
         displayAnalysisData(data, true); // true = show save button for new analysis
@@ -1071,7 +1198,7 @@ function renderBasicAssetList(assets) {
     const header = document.createElement('div');
     header.className = 'mb-4 pb-2 border-b';
     header.innerHTML = `
-        <div class="text-sm font-medium" style="color: red;">🔥 FIXED RIGHT PANEL - Assets Found</div>
+        <div class="text-sm font-medium">Assets Found</div>
         <div class="text-xs text-gray-500 mt-1">${assets.length} total assets</div>
     `;
     list.appendChild(header);

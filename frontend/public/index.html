@@ -46,106 +46,129 @@
   <body class="bg-gray-100 text-gray-800">
     <div class="container mx-auto p-4 md:p-8 max-w-7xl">
       <!-- Header -->
-      <header class="flex items-center justify-between mb-8">
-        <div class="flex items-center gap-4">
-          <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
-            <i class="fas fa-globe-americas text-2xl text-blue-600"></i>
+      <header class="text-center mb-8">
+        <div class="flex items-center justify-center gap-3 mb-3">
+          <div
+            class="bg-gradient-to-br from-blue-500 to-blue-600 p-3 rounded-xl shadow-lg"
+          >
+            <i class="fas fa-globe-americas text-2xl text-white"></i>
           </div>
-          <div>
-            <h1 class="text-2xl font-bold text-gray-900 tracking-tight">
-              Global Web Footprint Analyzer
-            </h1>
-            <p class="text-sm text-gray-500">
-              Visualize a website's global infrastructure, performance, and
-              loading journey.
-            </p>
-          </div>
+          <h1 class="text-3xl font-bold text-gray-900 tracking-tight">
+            Global Web Footprint Analyzer
+          </h1>
         </div>
-        <!-- Saved Analyses Button -->
-        <button
-          id="savedAnalysesBtn"
-          class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition flex items-center gap-2"
-        >
-          <i class="fas fa-bookmark"></i>
-          <span>Saved Analyses</span>
-        </button>
+        <p class="text-gray-600 max-w-2xl mx-auto">
+          Visualize a website's global infrastructure, performance, and loading
+          journey
+        </p>
       </header>
 
       <!-- Input Section -->
-      <div
-        class="bg-white p-4 rounded-xl shadow-lg border border-gray-200 mb-8"
-      >
-        <div class="flex flex-col sm:flex-row gap-3">
-          <input
-            type="text"
-            id="urlInput"
-            placeholder="Enter a full URL (e.g., https://www.theguardian.com)"
-            class="flex-grow bg-gray-100 p-3 px-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-gray-900"
-          />
-          <button
-            id="analyzeBtn"
-            class="bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition flex items-center justify-center shadow-md hover:shadow-lg transform hover:-translate-y-px"
-          >
-            <span id="btnText">Analyze</span>
-            <div id="btnSpinner" class="spinner w-5 h-5 ml-3 hidden"></div>
-          </button>
+      <div class="max-w-4xl mx-auto mb-6">
+        <div class="flex flex-col sm:flex-row gap-3 items-center">
+          <div class="flex-grow w-full sm:w-auto">
+            <input
+              type="text"
+              id="urlInput"
+              placeholder="Enter a website URL (e.g., https://www.example.com)"
+              class="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-gray-900 bg-white shadow-sm"
+            />
+          </div>
+          <div class="flex gap-2">
+            <button
+              id="analyzeBtn"
+              class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition flex items-center justify-center shadow-sm"
+            >
+              <span id="btnText">Analyze</span>
+              <div id="btnSpinner" class="spinner w-4 h-4 ml-2 hidden"></div>
+            </button>
+            <button
+              id="savedAnalysesBtn"
+              class="px-4 py-3 bg-gray-200 text-gray-600 rounded-lg hover:bg-gray-300 transition flex items-center gap-2 text-sm"
+            >
+              <i class="fas fa-history"></i>
+              <span>History</span>
+            </button>
+          </div>
         </div>
       </div>
 
       <!-- Results Section -->
       <div id="resultsSection" class="hidden">
+        <!-- Analysis Title Display -->
+        <div id="analysisTitleDisplay" class="hidden text-center mb-4">
+          <h2
+            class="text-xl font-semibold text-gray-800 bg-blue-50 px-4 py-2 rounded-lg inline-block"
+          >
+            <i class="fas fa-chart-line mr-2 text-blue-600"></i>
+            <span id="analysisTitleText">Saved Analysis</span>
+          </h2>
+        </div>
+
         <!-- Status Bar -->
         <div
           id="statusContainer"
-          class="bg-white p-4 rounded-lg shadow-md mb-6 flex items-center justify-between"
+          class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 p-4 rounded-lg mb-6"
         >
-          <div class="flex items-center">
-            <div
-              id="spinner"
-              class="spinner w-6 h-6 rounded-full border-4 border-gray-300 mr-3"
-            ></div>
-            <p id="statusText" class="text-gray-700 font-medium">
-              Waiting for analysis data...
-            </p>
-          </div>
-          <div class="text-right flex items-center gap-3">
-            <div id="summaryStats"></div>
-            <!-- Save Analysis Button -->
-            <button
-              id="saveAnalysisBtn"
-              class="hidden bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition"
-            >
-              <i class="fas fa-save mr-1"></i> Save Analysis
-            </button>
-            <button
-              id="refreshBtn"
-              class="hidden text-sm text-blue-600 hover:underline"
-            >
-              Refresh status
-            </button>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div
+                id="spinner"
+                class="spinner w-5 h-5 rounded-full border-4 border-blue-300 border-t-blue-600"
+              ></div>
+              <div>
+                <h3
+                  id="analysisTitle"
+                  class="text-lg font-semibold text-gray-900 hidden"
+                ></h3>
+                <p id="statusText" class="text-gray-800 font-medium">
+                  Waiting for analysis data...
+                </p>
+                <div id="summaryStats" class="text-sm text-gray-600 mt-1"></div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button
+                id="saveAnalysisBtn"
+                class="hidden bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition flex items-center gap-2"
+              >
+                <i class="fas fa-save"></i>
+                <span>Save</span>
+              </button>
+              <button
+                id="refreshBtn"
+                class="hidden text-sm text-blue-600 hover:text-blue-800 transition"
+              >
+                <i class="fas fa-sync-alt mr-1"></i>Refresh
+              </button>
+            </div>
           </div>
         </div>
 
         <!-- Tabs -->
-        <div class="bg-white p-3 rounded-lg shadow-sm mb-4 flex gap-2">
-          <button
-            class="tab-btn active px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-medium"
-            data-view="loadingJourney"
-          >
-            Loading Journey
-          </button>
-          <button
-            class="tab-btn px-3 py-1.5 rounded bg-slate-100 text-slate-800 text-sm font-medium"
-            data-view="densityHeatmap"
-          >
-            Asset Density Heatmap
-          </button>
-          <button
-            class="tab-btn px-3 py-1.5 rounded bg-slate-100 text-slate-800 text-sm font-medium"
-            data-view="dnsLatency"
-          >
-            DNS Heatmap
-          </button>
+        <div class="mb-6">
+          <div class="border-b border-gray-200">
+            <nav class="-mb-px flex space-x-8">
+              <button
+                class="tab-btn active py-2 px-1 border-b-2 border-blue-500 text-blue-600 font-medium text-sm"
+                data-view="loadingJourney"
+              >
+                <i class="fas fa-route mr-2"></i>Loading Journey
+              </button>
+              <button
+                class="tab-btn py-2 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm transition"
+                data-view="densityHeatmap"
+              >
+                <i class="fas fa-fire mr-2"></i>Asset Density
+              </button>
+              <button
+                class="tab-btn py-2 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm transition"
+                data-view="dnsLatency"
+              >
+                <i class="fas fa-network-wired mr-2"></i>DNS Performance
+              </button>
+            </nav>
+          </div>
         </div>
 
         <!-- Main Content: Map and Details -->
@@ -167,6 +190,106 @@
               id="detailsPanel"
               class="space-y-2 max-h-[460px] overflow-y-auto pr-2"
             ></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Understanding the Analysis - Always Visible -->
+      <div class="max-w-6xl mx-auto mt-8 mb-8">
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h3 class="text-xl font-bold text-gray-900 mb-4">
+            Understanding the Analysis
+          </h3>
+
+          <div class="grid md:grid-cols-3 gap-6">
+            <!-- Loading Journey Explanation -->
+            <div>
+              <div class="flex items-center mb-3">
+                <i class="fas fa-route text-blue-600 mr-2"></i>
+                <h4 class="font-semibold text-gray-900">Loading Journey</h4>
+              </div>
+              <p class="text-sm text-gray-600 mb-2">
+                Shows the chronological sequence of how your website loads
+                resources from different global locations.
+              </p>
+              <ul class="text-xs text-gray-500 space-y-1">
+                <li>
+                  • <strong>Pins:</strong> Server locations hosting website
+                  assets
+                </li>
+                <li>
+                  • <strong>Lines:</strong> Network connections from your
+                  location
+                </li>
+                <li>
+                  • <strong>Timeline:</strong> Request/response sequence with
+                  timings
+                </li>
+              </ul>
+            </div>
+
+            <!-- Asset Density Explanation -->
+            <div>
+              <div class="flex items-center mb-3">
+                <i class="fas fa-fire text-orange-600 mr-2"></i>
+                <h4 class="font-semibold text-gray-900">Asset Density</h4>
+              </div>
+              <p class="text-sm text-gray-600 mb-2">
+                Visualizes where the majority of website infrastructure is
+                concentrated globally.
+              </p>
+              <ul class="text-xs text-gray-500 space-y-1">
+                <li>
+                  • <strong>Heat zones:</strong> Areas with high server
+                  concentration
+                </li>
+                <li>
+                  • <strong>Color intensity:</strong> Brighter = more servers
+                </li>
+                <li>
+                  • <strong>Hot zones list:</strong> Ranked by asset count per
+                  location
+                </li>
+              </ul>
+            </div>
+
+            <!-- DNS Performance Explanation -->
+            <div>
+              <div class="flex items-center mb-3">
+                <i class="fas fa-network-wired text-green-600 mr-2"></i>
+                <h4 class="font-semibold text-gray-900">DNS Performance</h4>
+              </div>
+              <p class="text-sm text-gray-600 mb-2">
+                Measures how quickly different global DNS servers can resolve
+                the website's domain.
+              </p>
+              <ul class="text-xs text-gray-500 space-y-1">
+                <li>
+                  • <strong>Blue zones:</strong> Fast DNS resolution (&lt;50ms)
+                </li>
+                <li>
+                  • <strong>Red zones:</strong> Slower DNS resolution
+                  (&gt;200ms)
+                </li>
+                <li>
+                  • <strong>Latency list:</strong> DNS servers ranked by
+                  response time
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-gray-200">
+            <h4 class="font-semibold text-gray-900 mb-2">
+              How Data is Obtained
+            </h4>
+            <p class="text-sm text-gray-600">
+              Analysis is performed using real browser automation to load the
+              website and capture network traffic. Geolocation data is obtained
+              through IP address lookup, and DNS latency is measured from 10+
+              global DNS servers. The visualization shows actual network paths
+              and timings from your approximate location.
+            </p>
           </div>
         </div>
       </div>
@@ -263,6 +386,43 @@
             class="ml-3 text-gray-400 hover:text-gray-600"
           >
             <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div
+      id="confirmationModal"
+      class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center"
+    >
+      <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+        <div class="flex items-start mb-4">
+          <div class="flex-shrink-0 mr-3">
+            <i class="fas fa-exclamation-triangle text-orange-500 text-xl"></i>
+          </div>
+          <div>
+            <h3
+              id="confirmTitle"
+              class="text-lg font-semibold text-gray-900 mb-2"
+            >
+              Unsaved Changes
+            </h3>
+            <p id="confirmMessage" class="text-sm text-gray-600"></p>
+          </div>
+        </div>
+        <div class="flex justify-end gap-3">
+          <button
+            id="confirmCancel"
+            class="px-4 py-2 text-gray-600 hover:text-gray-800 transition rounded-lg hover:bg-gray-100"
+          >
+            Cancel
+          </button>
+          <button
+            id="confirmProceed"
+            class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+          >
+            Continue
           </button>
         </div>
       </div>
