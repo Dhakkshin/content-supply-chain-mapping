@@ -305,7 +305,8 @@ function closeSaveModalFunc() {
 
 async function saveCurrentAnalysis() {
     const title = analysisTitle.value.trim();
-    console.log('Saving analysis with title:', title);
+    console.log('Saving analysis with title:', title); // Keep this one for verification
+    
     if (!title) {
         showNotification('warning', 'Title Required', 'Please enter a title for this analysis');
         analysisTitle.focus();
